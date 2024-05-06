@@ -1,7 +1,13 @@
-from dataclasses import dataclass, asdict
-from enum import Enum 
 import re
-from typing import List, Tuple, Optional
+import urllib.request
+from dataclasses import asdict, dataclass
+from enum import Enum
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+import requests
+import yaml
+from bs4 import BeautifulSoup
 
 
 class SessionType(Enum):
@@ -18,6 +24,9 @@ class Presentation:
     title: str
     authors: List[Tuple[str, str]]
     abstract: str
+    session_summary: str
+    time: str
+    id_: str
 
 
 @dataclass
@@ -27,6 +36,9 @@ class Session:
     chair: Optional[Tuple[str, str]]
     cochair: Optional[Tuple[str, str]]
     presentations: List[Presentation]
+
+    def summary_str(self) -> str:
+        return f"{self.name} ({self.stype.name})"
 
     def __post_init__(self):
         assert self.name is not None
@@ -51,7 +63,7 @@ def extract_tr_contents(html):
         if end_index == -1:
             break
 
-        tr_content = html[start_index:end_index+5]
+        tr_content = html[start_index : end_index + 5]
         tr_contents.append(tr_content.strip())
 
         start_index = end_index + 5
@@ -59,7 +71,7 @@ def extract_tr_contents(html):
     return tr_contents
 
 
-def extract_presentations(tr_contents: List[str], st: SessionType) -> List[Presentation]:
+def append_presentations(contents: List[str], session: Session) -> None:
     # find presentations and group them
     ptitles = []
     ptitle_start_indices = []
@@ -88,6 +100,8 @@ def extract_presentations(tr_contents: List[str], st: SessionType) -> List[Prese
         pcontent = contents[start:end]
         authors = []
         abstract = None
+        time = None
+        id_ = None
         for c in pcontent:
 
             if "ICRA24_AuthorIndexWeb" in c:
@@ -102,18 +116,55 @@ def extract_presentations(tr_contents: List[str], st: SessionType) -> List[Prese
             if "Abstract:" in c:
                 abstract = c.split("<strong>Abstract:</strong>")[1].strip()
 
+            # time and id
+            if "pHdr" in c and "Add to My Program" in c and "Paper" in c:
+                pattern = r'<a name=".*?">(.*?)</a>'
+                match = re.search(pattern, c)
+                if match:
+                    assert time is None, "Time already exists"
+                    assert id_ is None, "ID already exists"
+                    time_id = match.group(1)
+                    time, id_ = time_id.split(", Paper")
+
         assert len(authors) > 0
-        if st in (SessionType.PLENARY, SessionType.KEYNOTE):
+        if session.stype in (SessionType.PLENARY, SessionType.KEYNOTE):
             assert len(authors) == 1
             assert abstract is None
-            presentations.append(Presentation(title=ptitle, authors=authors, abstract=abstract))
-        elif st == SessionType.EXPO:
+            presentations.append(
+                Presentation(
+                    title=ptitle,
+                    authors=authors,
+                    abstract=abstract,
+                    session_summary=session.summary_str(),
+                    time=time,
+                    id_=id_,
+                )
+            )
+        elif session.stype == SessionType.EXPO:
             assert abstract is None
-            presentations.append(Presentation(title=ptitle, authors=authors, abstract=abstract))
+            presentations.append(
+                Presentation(
+                    title=ptitle,
+                    authors=authors,
+                    abstract=abstract,
+                    session_summary=session.summary_str(),
+                    time=time,
+                    id_=id_,
+                )
+            )
         else:
             assert abstract is not None
-            presentations.append(Presentation(title=ptitle, authors=authors, abstract=abstract))
-    return presentations
+            presentations.append(
+                Presentation(
+                    title=ptitle,
+                    authors=authors,
+                    abstract=abstract,
+                    session_summary=session.summary_str(),
+                    time=time,
+                    id_=id_,
+                )
+            )
+    session.presentations = presentations
 
 
 def extract_session_instances(tr_contents: List[str], st: SessionType) -> Session:
@@ -122,7 +173,7 @@ def extract_session_instances(tr_contents: List[str], st: SessionType) -> Sessio
     cochair = None
 
     for content in tr_contents:
-        # find title 
+        # find title
         if "ICRA24_ProgramAtAGlanceWeb" in content:
             pattern = r'title=".*?">(.*?)</a>'
             match = re.search(pattern, content)
@@ -133,7 +184,9 @@ def extract_session_instances(tr_contents: List[str], st: SessionType) -> Sessio
         # find chair and co-chair
         if "Chair:" in content:
             is_cochair = "Co-Chair:" in content
-            chair_pattern = r'Chair: <a href=".*?">(.*?)</a></td><td class="r">(.*?)</td>'
+            chair_pattern = (
+                r'Chair: <a href=".*?">(.*?)</a></td><td class="r">(.*?)</td>'
+            )
             chair_match = re.search(chair_pattern, content)
             if chair_match:
 
@@ -146,42 +199,73 @@ def extract_session_instances(tr_contents: List[str], st: SessionType) -> Sessio
                     assert chair is None, f"Chair {chair} already exists"
                     chair = (chair_name, chair_affiliation)
 
-    presentations = extract_presentations(tr_contents, st)
-    return Session(name=title, stype=st, chair=chair, cochair=cochair, presentations=presentations)
+    session = Session(
+        name=title, stype=st, chair=chair, cochair=cochair, presentations=[]
+    )
+    append_presentations(tr_contents, session)
+    return session
 
 
-# open "./tmp.html"
-with open("./tmp.html", "r") as f:
-    html_content = f.read()
+def create_session_list(html_string: str) -> List[Session]:
+    tr_contents = extract_tr_contents(html_content)
+    indices_session_start = []
+    session_types = []
+    for i, c in enumerate(tr_contents):
+        if 'class="sHdr"' in c:
+            for session_type in SessionType:
+                if session_type.value in c:
+                    indices_session_start.append(i)
+                    session_types.append(session_type)
+                    break
 
-tr_contents = extract_tr_contents(html_content)
-indices_session_start = []
-session_types = []
-for i, c in enumerate(tr_contents):
-    if "class=\"sHdr\"" in c:
-        for session_type in SessionType:
-            if session_type.value in c:
-                indices_session_start.append(i)
-                session_types.append(session_type)
-                break
+    session_wise_tr_contents = []
+    for i, index in enumerate(indices_session_start):
+        if i == len(indices_session_start) - 1:
+            session_wise_tr_contents.append(tr_contents[index:])
+        else:
+            session_wise_tr_contents.append(
+                tr_contents[index : indices_session_start[i + 1]]
+            )
+    len(session_wise_tr_contents)
 
-session_wise_tr_contents = []
-for i, index in enumerate(indices_session_start):
-    if i == len(indices_session_start) - 1:
-        session_wise_tr_contents.append(tr_contents[index:])
+    assert len(session_types) == len(session_wise_tr_contents)
+    session_list = []
+    for st, contents in zip(session_types, session_wise_tr_contents):
+        if st == SessionType.PLENARY:
+            continue  # skip plenary sessions
+        session = extract_session_instances(contents, st)
+        session_list.append(session)
+    return session_list
+
+
+def fetch_html(url):
+    html_cache_dir = Path("/tmp/icra24_html_cache")
+    html_cache_path = html_cache_dir / Path(url).name
+    if html_cache_path.exists():
+        print(f"Reading from cache: {html_cache_path}")
+        with open(html_cache_path, "r") as f:
+            html_content = f.read()
     else:
-        session_wise_tr_contents.append(tr_contents[index:indices_session_start[i+1]])
-len(session_wise_tr_contents)
+        print(f"Fetching {url}")
+        with urllib.request.urlopen(url) as response:
+            response = requests.get(url)
+            soup = BeautifulSoup(response.content, "html.parser")
+            html_content = str(soup)
 
-assert len(session_types) == len(session_wise_tr_contents)
-session_list = []
-for st, contents in zip(session_types, session_wise_tr_contents):
-    if st == SessionType.PLENARY:
-        continue  # skip plenary sessions
-    session = extract_session_instances(contents, st)
-    session_list.append(session)
+        html_cache_dir.mkdir(exist_ok=True)
+        with open(html_cache_path, "w") as f:
+            f.write(html_content)
+    return html_content
 
-# dump the session list as yaml
-import yaml
-with open("sessions.yaml", "w") as f:
-    yaml.dump([asdict(s) for s in session_list], f)
+
+if __name__ == "__main__":
+    url1 = "https://ras.papercept.net/conferences/conferences/ICRA24/program/ICRA24_ContentListWeb_1.html"
+    url2 = "https://ras.papercept.net/conferences/conferences/ICRA24/program/ICRA24_ContentListWeb_2.html"
+    url3 = "https://ras.papercept.net/conferences/conferences/ICRA24/program/ICRA24_ContentListWeb_3.html"
+    days = ("tuesday", "wednesday", "thursday")
+    for url, day in zip((url1, url2, url3), days):
+        html_content = fetch_html(url)
+        session_list = create_session_list(html_content)
+        print(f"Extracted {len(session_list)} sessions from {url}")
+        with open(f"{day}_sessions.yaml", "w") as f:
+            yaml.dump([asdict(s) for s in session_list], f, sort_keys=False)
