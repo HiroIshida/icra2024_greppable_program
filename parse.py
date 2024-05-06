@@ -21,7 +21,7 @@ class SessionType(Enum):
 
 @dataclass
 class Presentation:
-    title: str
+    ptitle: str
     time: str
     id_: str
     session_summary: str
@@ -31,17 +31,19 @@ class Presentation:
 
 @dataclass
 class Session:
-    name: str
-    stype: SessionType
+    stitle: str
+    stype_name: str  # for serialization
+    stime: Optional[str]
     chair: Optional[Tuple[str, str]]
     cochair: Optional[Tuple[str, str]]
     presentations: List[Presentation]
+    stype: SessionType
 
     def summary_str(self) -> str:
-        return f"{self.name} ({self.stype.name})"
+        return f"{self.stitle} ({self.stype_name})"
 
     def __post_init__(self):
-        assert self.name is not None
+        assert self.stitle is not None
         if self.stype in (SessionType.POSTER, SessionType.PLENARY):
             assert self.chair is None
             assert self.cochair is None
@@ -136,7 +138,7 @@ def append_presentations(contents: List[str], session: Session) -> None:
             assert abstract is not None
         presentations.append(
             Presentation(
-                title=ptitle,
+                ptitle=ptitle,
                 authors=authors,
                 abstract=abstract,
                 session_summary=session.summary_str(),
@@ -144,6 +146,7 @@ def append_presentations(contents: List[str], session: Session) -> None:
                 id_=id_,
             )
         )
+    session.stime = presentations[0].time  # all times are same
     session.presentations = presentations
 
 
@@ -180,8 +183,15 @@ def extract_session_instances(tr_contents: List[str], st: SessionType) -> Sessio
                     chair = (chair_name, chair_affiliation)
 
     session = Session(
-        name=title, stype=st, chair=chair, cochair=cochair, presentations=[]
+        stitle=title,
+        stime=None,
+        stype_name=st.value,
+        chair=chair,
+        cochair=cochair,
+        presentations=[],
+        stype=st,
     )
+    # stime will be filled later
     append_presentations(tr_contents, session)
     return session
 
