@@ -20,7 +20,7 @@ def colored(text, color):
         "cyan": "\033[36m",
         "magenta": "\033[35m",
         "orange": "\033[38;5;208m",
-        "reset": "\033[0m"
+        "reset": "\033[0m",
     }
     return f"{colors[color]}{text}{colors['reset']}"
 
@@ -292,5 +292,5 @@ if __name__ == "__main__":
         with open(f"./dump/{day}_sessions.yaml", "w") as f:
             yaml.dump([asdict(s) for s in session_list], f, sort_keys=False)
         aggregate[day] = session_list
-    with open("./dump/aggregate_sessions.pkl", "wb") as f:
+    with open("/tmp/icra2024_aggregate_sessions.pkl", "wb") as f:
         pickle.dump(aggregate, f)

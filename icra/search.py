@@ -10,7 +10,7 @@ if __name__ == "__main__":
     parser.add_argument("--author", type=str, help="regex pattern for author")
     args = parser.parse_args()
 
-    with open("./dump/aggregate_sessions.pkl", "rb") as f:
+    with open("/tmp/icra2024_aggregate_sessions.pkl", "rb") as f:
         aggregate = pickle.load(f)
 
     presentations = []
@@ -25,11 +25,13 @@ if __name__ == "__main__":
 
                 if args.author is not None:
                     pattern = re.compile(args.author, re.IGNORECASE)
+
                     def match_any():
                         for author in presentation.authors:
                             if re.search(pattern, author[0]):
                                 return True
                         return False
+
                     if not match_any():
                         continue
 
