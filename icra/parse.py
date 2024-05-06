@@ -1,3 +1,4 @@
+import pickle
 import re
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -8,6 +9,20 @@ from typing import List, Optional, Tuple
 import requests
 import yaml
 from bs4 import BeautifulSoup
+
+
+def colored(text, color):
+    colors = {
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "blue": "\033[34m",
+        "yellow": "\033[33m",
+        "cyan": "\033[36m",
+        "magenta": "\033[35m",
+        "orange": "\033[38;5;208m",
+        "reset": "\033[0m"
+    }
+    return f"{colors[color]}{text}{colors['reset']}"
 
 
 class SessionType(Enum):
@@ -27,6 +42,17 @@ class Presentation:
     session_summary: str
     authors: List[Tuple[str, str]]
     abstract: str
+
+    def __repr__(self):
+        authors = ", ".join([f"{a[0]}" for a in self.authors])
+        return f"""
+{colored("Title", "green")}: {self.ptitle}
+{colored("Authors", "orange")}: {authors}
+{colored("Time", "orange")}: {self.time}
+{colored("ID", "orange")}: {self.id_}
+{colored("Session", "orange")}: {self.session_summary}
+{colored("Abstract", "orange")}: {self.abstract}
+"""
 
 
 @dataclass
@@ -136,6 +162,9 @@ def append_presentations(contents: List[str], session: Session) -> None:
             assert abstract is None
         else:
             assert abstract is not None
+            abstract = BeautifulSoup(abstract, "html.parser").get_text()
+            abstract = abstract.replace("\n", " ")
+
         presentations.append(
             Presentation(
                 ptitle=ptitle,
@@ -183,7 +212,8 @@ def extract_session_instances(tr_contents: List[str], st: SessionType) -> Sessio
                     chair = (chair_name, chair_affiliation)
 
     session = Session(
-        stitle=title,
+        # stitle=title,
+        stitle=BeautifulSoup(title, "html.parser").get_text(),
         stime=None,
         stype_name=st.value,
         chair=chair,
@@ -253,10 +283,14 @@ if __name__ == "__main__":
     url2 = "https://ras.papercept.net/conferences/conferences/ICRA24/program/ICRA24_ContentListWeb_2.html"
     url3 = "https://ras.papercept.net/conferences/conferences/ICRA24/program/ICRA24_ContentListWeb_3.html"
     days = ("tuesday", "wednesday", "thursday")
+    aggregate = {}
     for url, day in zip((url1, url2, url3), days):
         html_content = fetch_html(url)
         session_list = create_session_list(html_content)
         print(f"Extracted {len(session_list)} sessions from {url}")
         print(f"Dumping {day} sessions to dump/{day}_sessions.yaml")
-        with open(f"dump/{day}_sessions.yaml", "w") as f:
+        with open(f"./dump/{day}_sessions.yaml", "w") as f:
             yaml.dump([asdict(s) for s in session_list], f, sort_keys=False)
+        aggregate[day] = session_list
+    with open("./dump/aggregate_sessions.pkl", "wb") as f:
+        pickle.dump(aggregate, f)
