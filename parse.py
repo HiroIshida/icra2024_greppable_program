@@ -267,5 +267,6 @@ if __name__ == "__main__":
         html_content = fetch_html(url)
         session_list = create_session_list(html_content)
         print(f"Extracted {len(session_list)} sessions from {url}")
-        with open(f"{day}_sessions.yaml", "w") as f:
+        print(f"Dumping {day} sessions to dump/{day}_sessions.yaml")
+        with open(f"dump/{day}_sessions.yaml", "w") as f:
             yaml.dump([asdict(s) for s in session_list], f, sort_keys=False)
