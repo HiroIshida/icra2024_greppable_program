@@ -22,11 +22,11 @@ class SessionType(Enum):
 @dataclass
 class Presentation:
     title: str
-    authors: List[Tuple[str, str]]
-    abstract: str
-    session_summary: str
     time: str
     id_: str
+    session_summary: str
+    authors: List[Tuple[str, str]]
+    abstract: str
 
 
 @dataclass
