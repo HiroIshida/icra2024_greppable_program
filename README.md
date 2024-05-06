@@ -5,4 +5,5 @@ Usage
 ```bash
 pip install beautifulsoup4
 python3 parse.py
+ls dump/*.yaml
 ```
