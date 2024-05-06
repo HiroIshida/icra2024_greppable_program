@@ -130,40 +130,20 @@ def append_presentations(contents: List[str], session: Session) -> None:
         if session.stype in (SessionType.PLENARY, SessionType.KEYNOTE):
             assert len(authors) == 1
             assert abstract is None
-            presentations.append(
-                Presentation(
-                    title=ptitle,
-                    authors=authors,
-                    abstract=abstract,
-                    session_summary=session.summary_str(),
-                    time=time,
-                    id_=id_,
-                )
-            )
         elif session.stype == SessionType.EXPO:
             assert abstract is None
-            presentations.append(
-                Presentation(
-                    title=ptitle,
-                    authors=authors,
-                    abstract=abstract,
-                    session_summary=session.summary_str(),
-                    time=time,
-                    id_=id_,
-                )
-            )
         else:
             assert abstract is not None
-            presentations.append(
-                Presentation(
-                    title=ptitle,
-                    authors=authors,
-                    abstract=abstract,
-                    session_summary=session.summary_str(),
-                    time=time,
-                    id_=id_,
-                )
+        presentations.append(
+            Presentation(
+                title=ptitle,
+                authors=authors,
+                abstract=abstract,
+                session_summary=session.summary_str(),
+                time=time,
+                id_=id_,
             )
+        )
     session.presentations = presentations
 
 
